@@ -1,0 +1,334 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"net"
+	"net/url"
+	"strconv"
+	"time"
+)
+
+// Copy from https://github.com/hekmon/plexwebhooks
+
+type Payload struct {
+	Rating   int       // only present for Event == EventTypeRate
+	Event    EventType `json:"event"`
+	User     bool      `json:"user"`
+	Owner    bool      `json:"owner"`
+	Account  Account   `json:"Account"`
+	Server   Server    `json:"Server"`
+	Player   Player    `json:"Player"`
+	Metadata Metadata  `json:"Metadata"`
+}
+
+// UnmarshalJSON allows to convert rating to int
+func (p *Payload) UnmarshalJSON(data []byte) (err error) {
+	type Shadow Payload
+	tmp := struct {
+		Rating string `json:"rating"`
+		*Shadow
+	}{
+		Shadow: (*Shadow)(p),
+	}
+	if err = json.Unmarshal(data, &tmp); err != nil {
+		return
+	}
+	if tmp.Event == EventTypeRate {
+		if p.Rating, err = strconv.Atoi(tmp.Rating); err != nil {
+			err = fmt.Errorf("can't convert rating as int: %w", err)
+		}
+	}
+	return
+}
+
+type EventType string
+
+const (
+	// EventTypePause represents the pause event
+	EventTypePause EventType = "media.pause"
+	// EventTypePlay represents the play event
+	EventTypePlay EventType = "media.play"
+	// EventTypeRate represents the rate event
+	EventTypeRate EventType = "media.rate"
+	// EventTypeResume represents the resume event
+	EventTypeResume EventType = "media.resume"
+	// EventTypeScrobble represents the scrobble event
+	EventTypeScrobble EventType = "media.scrobble"
+	// EventTypeStop represents the stop event
+	EventTypeStop EventType = "media.stop"
+)
+
+type Account struct {
+	ID    int `json:"id"`
+	Thumb *url.URL
+	Title string `json:"title"`
+}
+
+// UnmarshalJSON allows to convert url string to url.URL
+func (a *Account) UnmarshalJSON(data []byte) (err error) {
+	type Shadow Account
+	tmp := struct {
+		Thumb string `json:"thumb"`
+		*Shadow
+	}{
+		Shadow: (*Shadow)(a),
+	}
+	if err = json.Unmarshal(data, &tmp); err != nil {
+		return
+	}
+	if a.Thumb, err = url.Parse(tmp.Thumb); err != nil {
+		err = fmt.Errorf("can't parse account thumb as URL: %w", err)
+	}
+	return
+}
+
+type Server struct {
+	Title string `json:"title"`
+	UUID  string `json:"uuid"`
+}
+
+type Player struct {
+	Local         bool `json:"local"`
+	PublicAddress net.IP
+	Title         string `json:"title"`
+	UUID          string `json:"uuid"`
+}
+
+// UnmarshalJSON allows to convert ip string  to net.IP
+func (p *Player) UnmarshalJSON(data []byte) (err error) {
+	type Shadow Player
+	tmp := struct {
+		PublicAddress string `json:"publicAddress"`
+		*Shadow
+	}{
+		Shadow: (*Shadow)(p),
+	}
+	if err = json.Unmarshal(data, &tmp); err != nil {
+		return
+	}
+	p.PublicAddress = net.ParseIP(tmp.PublicAddress)
+	return
+}
+
+// Metadata represents all the metadata associated with a media sent by the webhook
+type Metadata struct {
+	AddedAt               time.Time           `json:"addedAt"`               // movie + show + music
+	Art                   string              `json:"art"`                   // movie + show
+	AttributionLogo       *url.URL            `json:"attributionLogo"`       // streaming movie
+	AudienceRating        float64             `json:"audienceRating"`        // movie
+	AudienceRatingImage   string              `json:"audienceRatingImage"`   // movie
+	Banner                *url.URL            `json:"banner"`                // movie
+	Channel               []MetadataItem      `json:"Channel"`               // tv movie
+	ChapterSource         string              `json:"chapterSource"`         // show (movie too ?)
+	Collection            []MetadataItem      `json:"Collection"`            // movie
+	ContentRating         string              `json:"contentRating"`         // movie + show
+	Country               []MetadataItem      `json:"Country"`               // movie
+	CreatedAtAccuracy     string              `json:"createdAtAccuracy"`     // photo
+	CreatedAtTZOffset     string              `json:"createdAtTZOffset"`     // photo
+	Director              []MetadataItem      `json:"Director"`              // movie + show
+	Duration              time.Duration       `json:"duration"`              // movie
+	Field                 []MetadataItemField `json:"Field"`                 // tv movie
+	Genre                 []MetadataItem      `json:"Genre"`                 // movie
+	GenuineMediaAnalysis  string              `json:"genuineMediaAnalysis"`  // show
+	GrandparentArt        string              `json:"grandparentArt"`        // show
+	GrandparentKey        string              `json:"grandparentKey"`        // music
+	GrandparentRatingKey  string              `json:"grandparentRatingKey"`  // show + music
+	GrandparentTheme      string              `json:"grandparentTheme"`      // show
+	GrandparentThumb      string              `json:"grandparentThumb"`      // show + music
+	GrandparentTitle      string              `json:"grandparentTitle"`      // music
+	GUID                  *url.URL            `json:"guid"`                  // movie + show + music
+	GUIDExternal          []*url.URL          `json:"Guid"`                  // movie + show
+	Index                 int                 `json:"index"`                 // show + music
+	Indirect              bool                `json:"indirect"`              // movie
+	Key                   string              `json:"key"`                   // movie + show + music
+	LastRatedAt           time.Time           `json:"lastRatedAt"`           // movie + show + music
+	LastViewedAt          time.Time           `json:"lastViewedAt"`          // movie + show + music
+	LibrarySectionID      int                 `json:"librarySectionID"`      // movie + show + music
+	LibrarySectionKey     string              `json:"librarySectionKey"`     // movie + show + music
+	LibrarySectionTitle   string              `json:"librarySectionTitle"`   // movie + show + music
+	LibrarySectionType    LibrarySection      `json:"librarySectionType"`    // movie + show + music
+	Live                  string              `json:"live"`                  // show
+	Mood                  []MetadataItem      `json:"Mood"`                  // music
+	OneShot               string              `json:"oneShot"`               // tv movie
+	OriginallyAvailableAt time.Time           `json:"originallyAvailableAt"` // movie
+	OriginalTitle         string              `json:"originalTitle"`         // music
+	ParentArt             string              `json:"parentArt"`             // show
+	ParentIndex           int                 `json:"parentIndex"`           // show + music
+	ParentKey             string              `json:"parentKey"`             // music
+	ParentRatingKey       string              `json:"parentRatingKey"`       // show + music
+	ParentThumb           string              `json:"parentThumb"`           // show + music
+	ParentTitle           string              `json:"parentTitle"`           // music
+	ParentYear            int                 `json:"parentYear"`            // music
+	PrimaryExtraKey       string              `json:"primaryExtraKey"`       // movie
+	Producer              []MetadataItem      `json:"Producer"`              // movie
+	RatingCount           int                 `json:"ratingCount"`           // music
+	RatingImage           string              `json:"ratingImage"`           // movie
+	RatingKey             string              `json:"ratingKey"`             // movie + show + music
+	Role                  []MetadataItemRole  `json:"Role"`                  // movie
+	Similar               []MetadataItem      `json:"Similar"`               // movie
+	Studio                string              `json:"studio"`                // movie
+	SubType               MediaSubType        `json:"subtype"`               // clip
+	Summary               string              `json:"summary"`               // movie + show + music
+	Tagline               string              `json:"tagline"`               // movie
+	Thumb                 string              `json:"thumb"`                 // movie + show + music
+	Title                 string              `json:"title"`                 // movie + show + music
+	TitleSort             string              `json:"titleSort"`             // show (should be movie too)
+	Type                  MediaType           `json:"type"`                  // movie + show + music
+	UpdatedAt             time.Time           `json:"updatedAt"`             // movie + show + music
+	UserRating            float64             `json:"userRating"`            // movie
+	ViewCount             int                 `json:"viewCount"`             // movie + show + music
+	ViewOffset            int                 `json:"viewOffset"`            // movie
+	Writer                []MetadataItem      `json:"Writer"`                // movie + show
+	Year                  int                 `json:"year"`                  // movie + show
+	OriRating             float64             `json:"rating"`                // movie + show
+	Rating                []MetadataRating    `json:"Rating"`                // new Rating
+}
+
+// 新版本添加了Rating和rating两个字段
+type MetadataRating struct {
+	Image string  `json:"image"`
+	Value float64 `json:"value"`
+	Type  string  `json:"type"`
+	Count int     `json:"count"`
+}
+
+// UnmarshalJSON allows to convert some string to url or time type
+func (m *Metadata) UnmarshalJSON(data []byte) (err error) {
+	// Prepare the catcher
+	type Shadow Metadata
+	tmp := struct {
+		AddedAt               int64          `json:"addedAt"`
+		AttributionLogo       string         `json:"attributionLogo"`
+		Banner                string         `json:"banner"`
+		Duration              int64          `json:"duration"`
+		GUID                  string         `json:"guid"`
+		GUIDExternal          []MetadataGUID `json:"Guid"`
+		LastRatedAt           int64          `json:"lastRatedAt"`
+		LastViewedAt          int64          `json:"lastViewedAt"`
+		OriginallyAvailableAt string         `json:"originallyAvailableAt"`
+		UpdatedAt             int64          `json:"updatedAt"`
+		*Shadow
+	}{
+		Shadow: (*Shadow)(m),
+	}
+	// Unmarshal within the catcher
+	if err = json.Unmarshal(data, &tmp); err != nil {
+		return
+	}
+	// Use catcher values to build the golang one
+	m.AddedAt = time.Unix(tmp.AddedAt, 0)
+	if tmp.AttributionLogo != "" {
+		if m.AttributionLogo, err = url.Parse(tmp.AttributionLogo); err != nil {
+			return fmt.Errorf("can not convert AttributionLogo string as URL: %w", err)
+		}
+	}
+	if tmp.Banner != "" {
+		if m.Banner, err = url.Parse(tmp.Banner); err != nil {
+			return fmt.Errorf("can not convert Banner string as URL: %w", err)
+		}
+	}
+	m.Duration = time.Duration(tmp.Duration) * time.Millisecond
+	if m.GUID, err = url.Parse(tmp.GUID); err != nil {
+		return fmt.Errorf("can not convert GUID string from field guid as URL: %w", err)
+	}
+	m.GUIDExternal = make([]*url.URL, 0, len(tmp.GUIDExternal))
+	for _, g := range tmp.GUIDExternal {
+		if g.ID != "" {
+			ge, err := url.Parse(g.ID)
+			if err != nil {
+				return fmt.Errorf("can not convert GUID string from field Guid as URL: %w", err)
+			}
+			m.GUIDExternal = append(m.GUIDExternal, ge)
+		}
+	}
+	m.LastRatedAt = time.Unix(tmp.LastRatedAt, 0)
+	m.LastViewedAt = time.Unix(tmp.LastViewedAt, 0)
+	if tmp.OriginallyAvailableAt != "" {
+		if m.OriginallyAvailableAt, err = time.Parse("2006-01-02", tmp.OriginallyAvailableAt); err != nil {
+			return fmt.Errorf("can't parse 'OriginallyAvailableAt' as time.Time: %w", err)
+		}
+	}
+	m.UpdatedAt = time.Unix(tmp.UpdatedAt, 0)
+	return
+}
+
+type LibrarySection string
+
+const (
+	// LibrarySectionShow represents the shows library type
+	LibrarySectionShow LibrarySection = "show"
+	// LibrarySectionMusic represents the music library type
+	LibrarySectionMusic LibrarySection = "artist"
+	// LibrarySectionMovie represents the movies library type
+	LibrarySectionMovie LibrarySection = "movie"
+)
+
+type MediaType string
+
+const (
+	// MediaTypeMovie represents the media type for a movie
+	MediaTypeMovie MediaType = "movie"
+	// MediaTypeEpisode represents the media type for a show episode
+	MediaTypeEpisode MediaType = "episode"
+	// MediaTypeTrack represents the media type for an audio track
+	MediaTypeTrack MediaType = "track"
+	// MediaTypeClip represents the media type for a clip
+	MediaTypeClip MediaType = "clip"
+	// MediaTypePhoto represents the media type for a photo
+	MediaTypePhoto MediaType = "photo"
+)
+
+type MediaSubType string
+
+const (
+	// MediaSubTypeMovie represents the media sub type for a trailer
+	MediaSubTypeMovie MediaSubType = "trailer"
+	// MediaSubTypeBehindTheScenes represents the media sub type for a behind the scenes clip
+	MediaSubTypeBehindTheScenes MediaSubType = "behindTheScenes"
+)
+
+type MetadataItem struct {
+	ID     int    `json:"id"`
+	Filter string `json:"filter"`
+	Tag    string `json:"tag"`
+	Count  int    `json:"count"`
+}
+
+// MetadataItemRole is a specialisation for roles of MetadataItem
+type MetadataItemRole struct {
+	MetadataItem
+	Role  string `json:"role"`
+	Thumb *url.URL
+}
+
+// UnmarshalJSON allows to convert thumb string to url.URL
+func (mir *MetadataItemRole) UnmarshalJSON(data []byte) (err error) {
+	type Shadow MetadataItemRole
+	tmp := struct {
+		Thumb string `json:"thumb"`
+		*Shadow
+	}{
+		Shadow: (*Shadow)(mir),
+	}
+	if err = json.Unmarshal(data, &tmp); err != nil {
+		return
+	}
+	if tmp.Thumb != "" {
+		if mir.Thumb, err = url.Parse(tmp.Thumb); err != nil {
+			err = fmt.Errorf("can't parse MetadataItemRole thumb as URL: %w", err)
+		}
+	}
+	return
+}
+
+// MetadataItemField represents a ref to a Metadata.Field entity
+type MetadataItemField struct {
+	Locked bool   `json:"locked"`
+	Name   string `json:"name"`
+}
+
+// MetadataGUID represents a ref to third-party ids, i.e. imdb and tmdb
+type MetadataGUID struct {
+	ID string `json:"id"`
+}
